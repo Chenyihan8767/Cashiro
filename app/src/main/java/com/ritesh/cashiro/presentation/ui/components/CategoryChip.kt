@@ -8,6 +8,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,15 +35,17 @@ fun CategoryChip(
         horizontalArrangement = Arrangement.Start
     ) {
         val context = androidx.compose.ui.platform.LocalContext.current
-        val iconResId = if (category.iconName.isNotEmpty()) {
-            IconResolutionUtils.nameToResId(context, category.iconName)
-                .takeIf { it != 0 } ?: R.drawable.type_food_dining
-        } else {
-            com.ritesh.cashiro.utils.IconResolutionUtils.getSafeResId(
-                context, 
-                category.iconResId, 
-                R.drawable.type_food_dining
-            )
+        val iconResId = remember(context, category.iconName, category.iconResId) {
+            if (category.iconName.isNotEmpty()) {
+                IconResolutionUtils.nameToResId(context, category.iconName)
+                    .takeIf { it != 0 } ?: R.drawable.type_food_dining
+            } else {
+                com.ritesh.cashiro.utils.IconResolutionUtils.getSafeResId(
+                    context,
+                    category.iconResId,
+                    R.drawable.type_food_dining
+                )
+            }
         }
 
 
@@ -74,7 +78,7 @@ fun CategoryChip(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = category.name,
+                    text = category.displayLabel(LocalResources.current),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = MaterialTheme.typography.titleMedium.fontWeight,
                     maxLines = 1,
@@ -82,7 +86,7 @@ fun CategoryChip(
                 )
                 BlurredAnimatedVisibility(visible = category.description.isNotEmpty()) {
                     Text(
-                        text = category.description,
+                        text = category.displayDescription(LocalResources.current),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                         fontWeight = MaterialTheme.typography.bodySmall.fontWeight,

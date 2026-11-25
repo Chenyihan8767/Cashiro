@@ -17,10 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.ArrowDropUp
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -50,8 +46,6 @@ import com.ritesh.cashiro.presentation.ui.icons.Iconax
 import com.ritesh.cashiro.presentation.ui.icons.LongArrow
 import com.ritesh.cashiro.presentation.ui.theme.Dimensions
 import com.ritesh.cashiro.presentation.ui.theme.Spacing
-import com.ritesh.cashiro.presentation.ui.theme.success_dark
-import com.ritesh.cashiro.presentation.ui.theme.expense_dark
 import com.ritesh.cashiro.utils.CurrencyFormatter
 import dev.chrisbanes.haze.ExperimentalHazeApi
 import dev.chrisbanes.haze.HazeDefaults
@@ -66,8 +60,8 @@ import java.math.BigDecimal
 fun BalanceCard(
     modifier: Modifier = Modifier,
     totalBalance: BigDecimal,
-    monthlyChange: BigDecimal,
-    monthlyChangePercent: Int = 0,
+    monthlyIncome: BigDecimal,
+    monthlyExpenses: BigDecimal,
     currency: String,
     abbreviatedName: String,
     userName: String,
@@ -128,49 +122,26 @@ fun BalanceCard(
                     enter = fadeIn() + expandVertically(MaterialTheme.motionScheme.fastSpatialSpec()),
                     exit = fadeOut() + shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec())
                 ) {
-                    // Collapsed View
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth().padding(bottom = Spacing.sm),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = abbreviatedName.uppercase(),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(start = Spacing.xs)
+                        Text(
+                            text = stringResource(R.string.this_month_lbl),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                            MonthlyAmount(
+                                label = stringResource(R.string.type_income),
+                                amount = CurrencyFormatter.formatCurrency(monthlyIncome, currency),
+                                modifier = Modifier.weight(1f)
                             )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (monthlyChange >= BigDecimal.ZERO) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
-                                    contentDescription = null,
-                                    tint = if (monthlyChange >= BigDecimal.ZERO) success_dark else expense_dark,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Text(
-                                    text = stringResource(R.string.percent_this_month_format, if (monthlyChangePercent >= 0) "+" else "", monthlyChangePercent.toString()),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.alpha(0.6f),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        // Sparkline
-                        if (balanceHistory.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .width(100.dp)
-                                    .height(40.dp)
-                            ) {
-                                BalanceSparkline(
-                                    data = balanceHistory.map { it.balance },
-                                    lineColor = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                            MonthlyAmount(
+                                label = stringResource(R.string.type_expense),
+                                amount = CurrencyFormatter.formatCurrency(monthlyExpenses, currency),
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
@@ -355,6 +326,19 @@ private fun SummaryItem(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             fontWeight = FontWeight.Bold,
             fontSize = 10.sp
+        )
+    }
+}
+
+@Composable
+private fun MonthlyAmount(label: String, amount: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = amount,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold
         )
     }
 }

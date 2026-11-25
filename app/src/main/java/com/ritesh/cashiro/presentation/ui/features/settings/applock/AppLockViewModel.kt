@@ -37,6 +37,7 @@ class AppLockViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isLockEnabled = isEnabled,
+                        isLoaded = true,
                         timeoutMinutes = timeoutMinutes,
                         isLocked = shouldLock && isEnabled
                     )
@@ -158,5 +159,6 @@ data class AppLockUiState(
     val canUseBiometric: Boolean = false,
     val biometricCapability: BiometricCapability = BiometricCapability.Unknown,
     val authenticationError: String? = null,
-    val authenticationSucceeded: Boolean = false
+    val authenticationSucceeded: Boolean = false,
+    val isLoaded: Boolean = false
 )

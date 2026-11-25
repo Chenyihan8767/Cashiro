@@ -142,6 +142,37 @@ android {
 }
 
 
+abstract class GenerateLauncherShortcuts : DefaultTask() {
+    @get:Input
+    abstract val targetPackage: Property<String>
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val template: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val shortcuts = outputDirectory.file("xml/shortcuts.xml").get().asFile
+        shortcuts.parentFile.mkdirs()
+        shortcuts.writeText(template.get().asFile.readText().replace("@APPLICATION_ID@", targetPackage.get()))
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val generateShortcuts = tasks.register<GenerateLauncherShortcuts>(
+            "generate${variant.name.replaceFirstChar { it.uppercaseChar() }}LauncherShortcuts"
+        ) {
+            targetPackage.set(variant.applicationId)
+            template.set(layout.projectDirectory.file("src/main/shortcuts.xml"))
+        }
+        variant.sources.res?.addGeneratedSourceDirectory(generateShortcuts, GenerateLauncherShortcuts::outputDirectory)
+    }
+}
+
 // Configure Room schema export
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")

@@ -58,8 +58,9 @@ fun SharedTransitionScope.AddScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // Reset state when screen is opened to avoid stale data from previous entries
-    LaunchedEffect(subscriptionId, transactionType) {
-        if (subscriptionId == null && transactionType == null) {
+    LaunchedEffect(initialTab, subscriptionId, transactionType) {
+        pagerState.scrollToPage(initialTab)
+        if (subscriptionId == null) {
             addViewModel.resetAllStates()
         }
         

@@ -2,7 +2,6 @@ package com.ritesh.cashiro.presentation.effects
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationState
-import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.DecayAnimationSpec
 import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.exponentialDecay
@@ -28,6 +27,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.sign
@@ -90,13 +90,11 @@ internal const val OutBoundSpringDamp = 0.86f
  * @see overScrollOutOfBound
  */
 fun Modifier.overScrollVertical(
-    nestedScrollToParent: Boolean = true,
     scrollEasing: ((currentOffset: Float, newOffset: Float) -> Float)? = null,
     springStiff: Float = OutBoundSpringStiff,
     springDamp: Float = OutBoundSpringDamp,
 ): Modifier = overScrollOutOfBound(
     isVertical = true,
-    nestedScrollToParent,
     scrollEasing,
     springStiff,
     springDamp
@@ -106,13 +104,11 @@ fun Modifier.overScrollVertical(
  * @see overScrollOutOfBound
  */
 fun Modifier.overScrollHorizontal(
-    nestedScrollToParent: Boolean = true,
     scrollEasing: ((currentOffset: Float, newOffset: Float) -> Float)? = null,
     springStiff: Float = OutBoundSpringStiff,
     springDamp: Float = OutBoundSpringDamp,
 ): Modifier = overScrollOutOfBound(
     isVertical = false,
-    nestedScrollToParent,
     scrollEasing,
     springStiff,
     springDamp
@@ -126,7 +122,6 @@ fun Modifier.overScrollHorizontal(
  * @Author: cormor
  * @Email: cangtiansuo@gmail.com
  * @param isVertical is vertical, or horizontal ?
- * @param nestedScrollToParent Whether to dispatch nested scroll events to parent
  * @param scrollEasing U can refer to [DefaultParabolaScrollEasing], The incoming values are the currently existing overscroll Offset
  * and the new offset from the gesture.
  * modify it to cooperate with [springStiff] to customize the sliding damping effect.
@@ -137,12 +132,10 @@ fun Modifier.overScrollHorizontal(
 @Suppress("NAME_SHADOWING")
 fun Modifier.overScrollOutOfBound(
     isVertical: Boolean = true,
-    nestedScrollToParent: Boolean = true,
     scrollEasing: ((currentOffset: Float, newOffset: Float) -> Float)? = null,
     springStiff: Float = OutBoundSpringStiff,
     springDamp: Float = OutBoundSpringDamp,
 ): Modifier = composed {
-    val nestedScrollToParent by rememberUpdatedState(nestedScrollToParent)
     val scrollEasing by rememberUpdatedState(scrollEasing ?: DefaultParabolaScrollEasing)
     val springStiff by rememberUpdatedState(springStiff)
     val springDamp by rememberUpdatedState(springDamp)
@@ -152,142 +145,56 @@ fun Modifier.overScrollOutOfBound(
 
     val nestedConnection = remember {
         object : NestedScrollConnection {
-            /**
-             * If the offset is less than this value, we consider the animation to end.
-             */
-            val visibilityThreshold = 0.5f
-            lateinit var lastFlingAnimator: Animatable<Float, AnimationVector1D>
+            private val visibilityThreshold = 0.5f
+            private var rebound: Job? = null
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Found fling behavior in the wrong direction.
-                if (source != NestedScrollSource.UserInput) {
-                    return dispatcher.dispatchPreScroll(available, source)
-                }
-                if (::lastFlingAnimator.isInitialized && lastFlingAnimator.isRunning) {
-                    dispatcher.coroutineScope.launch {
-                        lastFlingAnimator.stop()
-                    }
-                }
-                val realAvailable = when {
-                    nestedScrollToParent -> available - dispatcher.dispatchPreScroll(
-                        available,
-                        source
-                    )
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                rebound?.cancel()
+                val delta = if (isVertical) available.y else available.x
+                if (abs(offset) <= visibilityThreshold || sign(delta) == sign(offset)) return Offset.Zero
 
-                    else -> available
-                }
-                val realOffset = if (isVertical) realAvailable.y else realAvailable.x
-
-                val isSameDirection = sign(realOffset) == sign(offset)
-                if (abs(offset) <= visibilityThreshold || isSameDirection) {
-                    return available - realAvailable
-                }
-                val offsetAtLast = scrollEasing(offset, realOffset)
-                // sign changed, coerce to start scrolling and exit
-                return if (sign(offset) != sign(offsetAtLast)) {
-                    offset = 0f
-                    if (isVertical) {
-                        Offset(
-                            x = available.x - realAvailable.x,
-                            y = available.y - realAvailable.y + realOffset
-                        )
-                    } else {
-                        Offset(
-                            x = available.x - realAvailable.x + realOffset,
-                            y = available.y - realAvailable.y
-                        )
-                    }
-                } else {
-                    offset = offsetAtLast
-                    if (isVertical) {
-                        Offset(x = available.x - realAvailable.x, y = available.y)
-                    } else {
-                        Offset(x = available.x, y = available.y - realAvailable.y)
-                    }
-                }
+                val previousOffset = offset
+                val nextOffset = scrollEasing(previousOffset, delta)
+                val consumed = if (sign(previousOffset) != sign(nextOffset)) -previousOffset else delta
+                offset = if (sign(previousOffset) != sign(nextOffset)) 0f else nextOffset
+                return if (isVertical) Offset(0f, consumed) else Offset(consumed, 0f)
             }
 
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource
-            ): Offset {
-                // Found fling behavior in the wrong direction.
-                if (source != NestedScrollSource.UserInput) {
-                    return dispatcher.dispatchPreScroll(available, source)
-                }
-                val realAvailable = when {
-                    nestedScrollToParent -> available - dispatcher.dispatchPostScroll(
-                        consumed,
-                        available,
-                        source
-                    )
-
-                    else -> available
-                }
-                offset = scrollEasing(offset, if (isVertical) realAvailable.y else realAvailable.x)
-                return if (isVertical) {
-                    Offset(x = available.x - realAvailable.x, y = available.y)
-                } else {
-                    Offset(x = available.x, y = available.y - realAvailable.y)
-                }
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                val delta = if (isVertical) available.y else available.x
+                if (source != NestedScrollSource.UserInput || delta == 0f) return Offset.Zero
+                offset = scrollEasing(offset, delta)
+                return if (isVertical) Offset(0f, delta) else Offset(delta, 0f)
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                if (::lastFlingAnimator.isInitialized && lastFlingAnimator.isRunning) {
-                    lastFlingAnimator.stop()
-                }
-                val parentConsumed = when {
-                    nestedScrollToParent -> dispatcher.dispatchPreFling(available)
-                    else -> Velocity.Zero
-                }
-                val realAvailable = available - parentConsumed
-                var leftVelocity = if (isVertical) realAvailable.y else realAvailable.x
-
-                if (abs(offset) >= visibilityThreshold && sign(leftVelocity) != sign(offset)) {
-                    lastFlingAnimator = Animatable(offset).apply {
-                        when {
-                            leftVelocity < 0 -> updateBounds(lowerBound = 0f)
-                            leftVelocity > 0 -> updateBounds(upperBound = 0f)
-                        }
-                    }
-                    leftVelocity = lastFlingAnimator.animateTo(
-                        0f,
-                        spring(springDamp, springStiff, visibilityThreshold),
-                        leftVelocity
-                    ) {
-                        offset = scrollEasing(offset, value - offset)
-                    }.endState.velocity
-                }
-                return if (isVertical) {
-                    Velocity(parentConsumed.x, y = available.y - leftVelocity)
-                } else {
-                    Velocity(available.x - leftVelocity, y = parentConsumed.y)
-                }
+                val velocity = if (isVertical) available.y else available.x
+                if (sign(velocity) != sign(offset)) startRebound(0f)
+                return Velocity.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                val realAvailable = when {
-                    nestedScrollToParent -> available - dispatcher.dispatchPostFling(
-                        consumed,
-                        available
-                    )
+                val velocity = if (isVertical) available.y else available.x
+                startRebound(velocity)
+                return Velocity.Zero
+            }
 
-                    else -> available
+            private fun startRebound(velocity: Float) {
+                if (rebound?.isActive == true) return
+                if (abs(offset) < visibilityThreshold) {
+                    offset = 0f
+                    return
                 }
-
-                lastFlingAnimator = Animatable(offset)
-                lastFlingAnimator.animateTo(
-                    0f,
-                    spring(springDamp, springStiff, visibilityThreshold),
-                    if (isVertical) realAvailable.y else realAvailable.x
-                ) {
-                    offset = scrollEasing(offset, value - offset)
-                }
-                return if (isVertical) {
-                    Velocity(x = available.x - realAvailable.x, y = available.y)
-                } else {
-                    Velocity(x = available.x, y = available.y - realAvailable.y)
+                rebound = dispatcher.coroutineScope.launch {
+                    Animatable(offset).animateTo(
+                        0f,
+                        spring(springDamp, springStiff, visibilityThreshold),
+                        initialVelocity = velocity
+                    ) {
+                        offset = value
+                    }
+                    offset = 0f
                 }
             }
         }
@@ -310,43 +217,46 @@ fun Modifier.overScrollOutOfBound(
 fun rememberOverscrollFlingBehavior(
     decaySpec: DecayAnimationSpec<Float> = exponentialDecay(),
     getScrollState: () -> ScrollableState,
-): FlingBehavior = remember(decaySpec, getScrollState) {
-    object : FlingBehavior {
-        /**
-         * - We should check it every frame of fling
-         * - Should stop fling when returning true and return the remaining speed immediately.
-         * - Without this detection, scrollBy() will continue to consume velocity,
-         * which will cause a velocity error in nestedScroll.
-         */
-        private val Float.canNotBeConsumed: Boolean // this is Velocity
-            get() {
-                val state = getScrollState()
-                return !(this < 0 && state.canScrollBackward || this > 0 && state.canScrollForward)
-            }
-
-        override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
-            if (initialVelocity.canNotBeConsumed) {
-                return initialVelocity
-            }
-            return if (abs(initialVelocity) > 1f) {
-                var velocityLeft = initialVelocity
-                var lastValue = 0f
-                AnimationState(
-                    initialValue = 0f,
-                    initialVelocity = initialVelocity,
-                ).animateDecay(decaySpec) {
-                    val delta = value - lastValue
-                    val consumed = scrollBy(delta)
-                    lastValue = value
-                    velocityLeft = this.velocity
-                    // avoid rounding errors and stop if anything is unconsumed
-                    if (abs(delta - consumed) > 0.5f || velocityLeft.canNotBeConsumed) {
-                        cancelAnimation()
-                    }
+): FlingBehavior {
+    val currentScrollState by rememberUpdatedState(getScrollState)
+    return remember(decaySpec) {
+        object : FlingBehavior {
+            /**
+             * - We should check it every frame of fling
+             * - Should stop fling when returning true and return the remaining speed immediately.
+             * - Without this detection, scrollBy() will continue to consume velocity,
+             * which will cause a velocity error in nestedScroll.
+             */
+            private val Float.canNotBeConsumed: Boolean // this is Velocity
+                get() {
+                    val state = currentScrollState()
+                    return !(this < 0 && state.canScrollBackward || this > 0 && state.canScrollForward)
                 }
-                velocityLeft
-            } else {
-                initialVelocity
+
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                if (initialVelocity.canNotBeConsumed) {
+                    return initialVelocity
+                }
+                return if (abs(initialVelocity) > 1f) {
+                    var velocityLeft = initialVelocity
+                    var lastValue = 0f
+                    AnimationState(
+                        initialValue = 0f,
+                        initialVelocity = initialVelocity,
+                    ).animateDecay(decaySpec) {
+                        val delta = value - lastValue
+                        val consumed = scrollBy(delta)
+                        lastValue = value
+                        velocityLeft = this.velocity
+                        // avoid rounding errors and stop if anything is unconsumed
+                        if (abs(delta - consumed) > 0.5f || velocityLeft.canNotBeConsumed) {
+                            cancelAnimation()
+                        }
+                    }
+                    velocityLeft
+                } else {
+                    initialVelocity
+                }
             }
         }
     }

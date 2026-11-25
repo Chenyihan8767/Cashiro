@@ -87,7 +87,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Handle intent if activity is launched from notification or shortcut/tile
-        handleIntent(intent)
+        if (savedInstanceState == null) {
+            handleIntent(intent)
+        } else {
+            editTransactionId = savedInstanceState.getLong("pending_edit_id", -1L).takeUnless { it == -1L }
+            addTransactionTab = savedInstanceState.getInt("pending_add_tab", -1).takeUnless { it == -1 }
+            addTransactionType = savedInstanceState.getString("pending_add_type")
+        }
 
         // Schedule daily reminders
         lifecycleScope.launch {
@@ -118,6 +124,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        editTransactionId?.let { outState.putLong("pending_edit_id", it) }
+        addTransactionTab?.let { outState.putInt("pending_add_tab", it) }
+        outState.putString("pending_add_type", addTransactionType)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         // Handle intent when activity is already running
@@ -133,9 +146,11 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             ACTION_ADD_TRANSACTION -> {
+                addTransactionType = null
                 addTransactionTab = 0
             }
             ACTION_ADD_SUBSCRIPTION -> {
+                addTransactionType = null
                 addTransactionTab = 1
             }
             ACTION_ADD_TRANSFER -> {

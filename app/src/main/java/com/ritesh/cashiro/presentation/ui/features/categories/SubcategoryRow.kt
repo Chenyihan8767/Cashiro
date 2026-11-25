@@ -10,6 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalResources
+import com.ritesh.cashiro.presentation.ui.components.displayLabel
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import com.ritesh.cashiro.R
@@ -36,7 +38,7 @@ fun SubcategoryRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        items(subcategories) { subcategory ->
+        items(subcategories, key = { it.id }) { subcategory ->
             SubcategoryChip(
                     subcategory = subcategory,
                     onClick = { onSubcategoryClick(subcategory) }
@@ -96,7 +98,7 @@ private fun SubcategoryChip(
 
         // Name
         Text(
-                text = subcategory.name,
+                text = subcategory.displayLabel(LocalResources.current),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

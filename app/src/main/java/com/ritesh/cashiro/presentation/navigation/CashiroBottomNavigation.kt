@@ -56,7 +56,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -79,7 +78,6 @@ import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 
 data class FabConfig(
-    val icon: ImageVector,
     val contentDescription: String,
     val onClick: () -> Unit = {},
     val dropdownContent: (@Composable ColumnScope.(dismiss: () -> Unit) -> Unit)? = null
@@ -333,7 +331,7 @@ fun CashiroBottomNavigation(
                         )
                     ) {
                         var expanded by remember { mutableStateOf(false) }
-                        val capturedDropdown = remember(expanded) { fabConfig?.dropdownContent }
+                        val dropdown = fabConfig?.dropdownContent
 
                         Box(contentAlignment = Alignment.BottomEnd) {
                             FloatingActionButton(
@@ -356,7 +354,7 @@ fun CashiroBottomNavigation(
                             }
 
                             val dropContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                            if (capturedDropdown != null) {
+                            if (dropdown != null) {
                                 DropdownMenu(
                                     expanded = expanded,
                                     onDismissRequest = { expanded = false },
@@ -381,7 +379,7 @@ fun CashiroBottomNavigation(
                                     ),
                                     shape = RoundedCornerShape(24.dp)
                                 ) {
-                                    capturedDropdown.invoke(this) { expanded = false }
+                                    dropdown.invoke(this) { expanded = false }
                                 }
                             }
                         }

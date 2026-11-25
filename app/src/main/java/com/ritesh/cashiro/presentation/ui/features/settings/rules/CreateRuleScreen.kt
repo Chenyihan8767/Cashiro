@@ -251,9 +251,7 @@ fun CreateRuleScreen(
                             modifier = Modifier.padding(horizontal = 4.dp)
                         )
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .overScrollVertical(false),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                         ) {
                             FlowRow(

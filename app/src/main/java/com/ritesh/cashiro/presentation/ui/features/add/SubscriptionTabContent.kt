@@ -66,6 +66,7 @@ import androidx.compose.ui.res.stringResource
 import com.ritesh.cashiro.R
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -78,6 +79,7 @@ import com.ritesh.cashiro.presentation.effects.rememberOverscrollFlingBehavior
 import com.ritesh.cashiro.presentation.ui.components.AccountSelectionSheet
 import com.ritesh.cashiro.presentation.ui.components.AttachmentSection
 import com.ritesh.cashiro.presentation.ui.components.BrandIcon
+import com.ritesh.cashiro.presentation.ui.components.displayLabel
 import com.ritesh.cashiro.presentation.ui.components.CategorySelectionSheet
 import com.ritesh.cashiro.presentation.ui.components.DatePicker
 import com.ritesh.cashiro.presentation.ui.components.LoadingCircle
@@ -434,7 +436,7 @@ fun SubscriptionTabContent(
                 // Category Selection
                 val categoryInteractionSource = remember { MutableInteractionSource() }
                 TextField(
-                    value = uiState.category,
+                    value = selectedCategoryObj?.displayLabel(LocalResources.current) ?: uiState.category,
                     onValueChange = {},
                     label = { Text(stringResource(R.string.category_label), fontWeight = FontWeight.SemiBold) },
                     readOnly = true,
@@ -502,7 +504,8 @@ fun SubscriptionTabContent(
                 if (uiState.subcategory != null) {
                     Spacer(modifier = Modifier.height(Spacing.md))
                     TextField(
-                        value = uiState.subcategory ?: stringResource(R.string.none_label),
+                        value = selectedSubcategoryObj2?.displayLabel(LocalResources.current)
+                                ?: uiState.subcategory ?: stringResource(R.string.none_label),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text(stringResource(R.string.subcategory_label)) },

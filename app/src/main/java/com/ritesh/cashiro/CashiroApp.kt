@@ -15,6 +15,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.ritesh.cashiro.presentation.navigation.AppLock
 import com.ritesh.cashiro.presentation.navigation.Home
@@ -44,6 +46,7 @@ fun CashiroApp(
     val darkTheme = themeUiState.isDarkTheme ?: isSystemInDarkTheme()
 
     val navController = rememberNavController()
+    val currentEntry by navController.currentBackStackEntryAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // Observe lifecycle events and refresh lock state when app resumes from background
@@ -92,10 +95,14 @@ fun CashiroApp(
         }
     }
 
-    // Navigate to Add screen when addTransactionTab changes
-    LaunchedEffect(addTransactionTab, addTransactionType) {
-        addTransactionTab?.let { tab ->
-            navController.navigate(AddTransaction(initialTab = tab, type = addTransactionType))
+    // Keep launcher requests pending through initialization, onboarding and app lock.
+    val canOpenAdd = appLockUiState.isLoaded && !appLockUiState.isLocked &&
+        currentEntry?.destination?.let { !it.hasRoute<AppLock>() && !it.hasRoute<OnBoarding>() } == true
+    LaunchedEffect(addTransactionTab, addTransactionType, canOpenAdd) {
+        if (canOpenAdd && addTransactionTab != null) {
+            navController.navigate(AddTransaction(initialTab = addTransactionTab, type = addTransactionType)) {
+                launchSingleTop = true
+            }
             onAddComplete()
         }
     }

@@ -173,7 +173,7 @@ fun CashiroNavHost(
     val isBudgetDetailScreen = currentRoute?.contains(BudgetDetail::class.qualifiedName ?: "") == true
 
     val isFloatingNav = themeUiState.navigationBarStyle == NavigationBarStyle.FLOATING
-    val hideFabsForFloatingNav = isFloatingNav && (isHomeScreen || isTransactionsScreen)
+    val showSecondaryActionsInMenu = isFloatingNav && (isHomeScreen || isTransactionsScreen)
     val showFloatingFab = isFloatingNav && (isHomeScreen || isTransactionsScreen || isAnalyticsScreen)
 
     val hazeState = remember { HazeState() }
@@ -828,7 +828,7 @@ fun CashiroNavHost(
                 modifier = Modifier.fillMaxSize()
             ) {
                 AnimatedVisibility(
-                    visible = (isHomeScreen || isTransactionsScreen || isSubscriptionsScreen || isBudgetDetailScreen) && !hideFabsForFloatingNav,
+                    visible = isHomeScreen || isTransactionsScreen || isSubscriptionsScreen || isBudgetDetailScreen,
                     enter = fadeIn() + scaleIn(),
                     exit = fadeOut() + scaleOut(),
                     modifier = Modifier
@@ -850,7 +850,7 @@ fun CashiroNavHost(
                         val smallFabContainerColor =  MaterialTheme.colorScheme.tertiaryContainer
                         val smallFabContentColor = MaterialTheme.colorScheme.onTertiaryContainer
                         // Secondary FAB (Sync or Download)
-                        if (isHomeScreen || isTransactionsScreen) {
+                        if ((isHomeScreen || isTransactionsScreen) && !showSecondaryActionsInMenu) {
                             SmallFloatingActionButton(
                                 onClick = {
                                     if (isHomeScreen) {
@@ -947,7 +947,7 @@ fun CashiroNavHost(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Add,
-                                contentDescription = stringResource(R.string.add_transaction_subscription_cd),
+                                contentDescription = stringResource(if (isSubscriptionsScreen) R.string.add_subscription else R.string.add_transaction),
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -1075,135 +1075,112 @@ fun CashiroNavHost(
         }
 
         val optionsDesc = stringResource(R.string.options_desc)
-        val addTransactionLbl = stringResource(R.string.add_transaction)
         val syncSmsLbl = stringResource(R.string.sync_sms)
         val askAiLbl = aiModelSelection.selected?.let { stringResource(R.string.ask_local_model, it.name) }
             ?: stringResource(R.string.ask_ai)
         val exportLbl = stringResource(R.string.export)
         val searchLbl = stringResource(R.string.search)
 
-        val fabConfig = remember(showFloatingFab, isHomeScreen, isTransactionsScreen, isAnalyticsScreen) {
-            if (showFloatingFab) {
-                FabConfig(
-                    icon = Icons.Rounded.Add,
-                    contentDescription = optionsDesc,
-                    dropdownContent = { dismiss ->
-                        if (isHomeScreen || isTransactionsScreen) {
-                            DropdownMenuItem(
-                                text = { Text(
-                                    text = addTransactionLbl,
-                                ) },
-                                onClick = { 
-                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                    dismiss()
-                                    navController.safeNavigate(AddTransaction(initialTab = 0))
-                                },
-                                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) }
+        val fabConfig = if (showFloatingFab) {
+            FabConfig(
+                contentDescription = optionsDesc,
+                dropdownContent = { dismiss ->
+                    if (isHomeScreen) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .combinedClickable(
+                                    onClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                        dismiss()
+                                        homeViewModel.scanSmsMessages()
+                                    },
+                                    onLongClick = {
+                                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        dismiss()
+                                        showFullResyncDialog = true
+                                    }
+                                )
+                                .padding(MenuDefaults.DropdownMenuItemContentPadding),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Sync,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = syncSmsLbl,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        if (aiEnabled == true) {
                             HorizontalDivider(
                                 thickness = 1.5.dp,
                                 color = MaterialTheme.colorScheme.surface.copy(0.6f)
                             )
-                        }
-
-                        
-                        if (isHomeScreen) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .combinedClickable(
-                                        onClick = {
-                                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                            dismiss()
-                                            homeViewModel.scanSmsMessages()
-                                        },
-                                        onLongClick = {
-                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                            dismiss()
-                                            showFullResyncDialog = true
-                                        }
-                                    )
-                                    .padding(MenuDefaults.DropdownMenuItemContentPadding),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Sync,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = syncSmsLbl,
+                            DropdownMenuItem(
+                                text = { Text(
+                                    text = askAiLbl,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            if (aiEnabled == true) {
-                                HorizontalDivider(
-                                    thickness = 1.5.dp,
-                                    color = MaterialTheme.colorScheme.surface.copy(0.6f)
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(
-                                        text = askAiLbl,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    ) },
-                                    onClick = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                        dismiss()
-                                        navController.safeNavigate(Chat)
-                                    },
-                                    leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
-                                )
-                            }
-                        } else if (isTransactionsScreen) {
-                            DropdownMenuItem(
-                                text = { Text(exportLbl) },
+                                ) },
                                 onClick = {
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     dismiss()
-                                    showExportDialog = true
+                                    navController.safeNavigate(Chat)
                                 },
-                                leadingIcon = { Icon(Iconax.ImportArrow01, contentDescription = null) }
+                                leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
                             )
-                        } else if (isAnalyticsScreen) {
+                        }
+                    } else if (isTransactionsScreen) {
+                        DropdownMenuItem(
+                            text = { Text(exportLbl) },
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                dismiss()
+                                showExportDialog = true
+                            },
+                            leadingIcon = { Icon(Iconax.ImportArrow01, contentDescription = null) }
+                        )
+                    } else if (isAnalyticsScreen) {
+                        DropdownMenuItem(
+                            text = { Text(searchLbl) },
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                dismiss()
+                                navController.safeNavigate(Transactions(focusSearch = true)) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = false
+                                }
+                            },
+                            leadingIcon = { Icon(Iconax.Search, contentDescription = null) }
+                        )
+                        if (aiEnabled == true) {
+                            HorizontalDivider(
+                                thickness = 1.5.dp,
+                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                            )
                             DropdownMenuItem(
-                                text = { Text(searchLbl) },
+                                text = { Text(askAiLbl) },
                                 onClick = {
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     dismiss()
-                                    navController.safeNavigate(Transactions(focusSearch = true)) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = false
-                                    }
+                                    navController.safeNavigate(Chat)
                                 },
-                                leadingIcon = { Icon(Iconax.Search, contentDescription = null) }
+                                leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
                             )
-                            if (aiEnabled == true) {
-                                HorizontalDivider(
-                                    thickness = 1.5.dp,
-                                    color = MaterialTheme.colorScheme.surface.copy(0.6f)
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(askAiLbl) },
-                                    onClick = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                        dismiss()
-                                        navController.safeNavigate(Chat)
-                                    },
-                                    leadingIcon = { Icon(Iconax.AiCommentary, contentDescription = null) }
-                                )
-                            }
                         }
                     }
-                )
-            } else null
-        }
+                }
+            )
+        } else null
 
         // Bottom Navigation
         CashiroBottomNavigation(

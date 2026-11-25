@@ -1203,8 +1203,8 @@ private fun NetworthSummaryCards(
 
         BalanceCard(
             totalBalance = uiState.totalBalance,
-            monthlyChange = uiState.monthlyChange,
-            monthlyChangePercent = uiState.monthlyChangePercent,
+            monthlyIncome = uiState.currentMonthIncome,
+            monthlyExpenses = uiState.currentMonthExpenses,
             currency = uiState.selectedCurrency,
             abbreviatedName = abbreviatedName,
             userName = uiState.userName,
