@@ -145,7 +145,7 @@ private fun WidgetItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         PreferenceSwitch(
-            title = widgetModel.widget.displayName,
+            title = stringResource(widgetModel.widget.label),
             checked = widgetModel.isVisible,
             onCheckedChange = onToggleVisibility,
             leadingIcon = {

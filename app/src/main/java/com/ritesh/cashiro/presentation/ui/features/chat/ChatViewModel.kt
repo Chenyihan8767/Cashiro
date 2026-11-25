@@ -1,28 +1,40 @@
 package com.ritesh.cashiro.presentation.ui.features.chat
 
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ritesh.cashiro.core.Constants
 import com.ritesh.cashiro.data.database.entity.ChatMessage
-import com.ritesh.cashiro.data.database.entity.ChatSession
+import com.ritesh.cashiro.data.model.ChatAttachment
+import com.ritesh.cashiro.data.model.ChatAttachmentKind
+import com.ritesh.cashiro.data.preferences.AiDataAccess
+import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
+import com.ritesh.cashiro.data.repository.ApiAiModel
 import com.ritesh.cashiro.data.repository.LlmRepository
 import com.ritesh.cashiro.data.repository.ModelRepository
-import com.ritesh.cashiro.data.repository.ModelState
-import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
+import com.ritesh.cashiro.data.service.ApiLlmError
+import com.ritesh.cashiro.data.service.ApiLlmException
+import com.ritesh.cashiro.data.service.ChatMediaError
+import com.ritesh.cashiro.data.service.ChatMediaException
+import com.ritesh.cashiro.data.service.ChatMediaStore
 import com.ritesh.cashiro.utils.TokenUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -30,360 +42,260 @@ import javax.inject.Inject
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val llmRepository: LlmRepository,
-    private val modelRepository: ModelRepository,
-    private val userPreferencesRepository: UserPreferencesRepository
+    modelRepository: ModelRepository,
+    private val mediaStore: ChatMediaStore,
+    private val preferences: UserPreferencesRepository
 ) : ViewModel() {
-    
-    private val _toastEvent = MutableSharedFlow<String>()
-    val toastEvent: SharedFlow<String> = _toastEvent.asSharedFlow()
-    
-    private val _contextMessage = MutableStateFlow<ChatMessage?>(null)
-    
-    private var currentGenerationJob: kotlinx.coroutines.Job? = null
-    
-    private val _currentSessionId = MutableStateFlow("legacy_session")
-    val currentSessionId: StateFlow<String> = _currentSessionId.asStateFlow()
-    
-    val chatSessions: StateFlow<List<ChatSession>> = llmRepository.getAllSessions()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-    
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val messages: StateFlow<List<ChatMessage>> = _currentSessionId.flatMapLatest { sessionId ->
-        combine(
-            llmRepository.getMessagesForSession(sessionId),
-            _contextMessage
-        ) { dbMessages, contextMsg ->
-            if (dbMessages.isEmpty() && contextMsg != null) {
-                // Show context message only when chat is empty
-                listOf(contextMsg)
-            } else {
-                dbMessages
-            }
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
-    
-    val modelState: StateFlow<ModelState> = modelRepository.modelState
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = if (modelRepository.isModelDownloaded()) ModelState.READY else ModelState.NOT_DOWNLOADED
-        )
-    
+    private var generationJob: Job? = null
+    private var mediaJob: Job? = null
+    private val _mediaState = MutableStateFlow(ChatMediaState())
+    val mediaState = _mediaState.asStateFlow()
+    private val _currentSessionId = MutableStateFlow(UUID.randomUUID().toString())
+    val currentSessionId = _currentSessionId.asStateFlow()
     private val _uiState = MutableStateFlow(ChatUiState())
-    val uiState: StateFlow<ChatUiState> = combine(
-        _uiState,
-        modelRepository.downloadProgress
-    ) { state, progress ->
-        state.copy(downloadProgress = progress)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ChatUiState()
-    )
-    
+    val uiState = _uiState.asStateFlow()
     private val _currentResponse = MutableStateFlow("")
-    val currentResponse: StateFlow<String> = _currentResponse.asStateFlow()
-    
-    val isTokenInfoEnabled = userPreferencesRepository.isTokenInfoEnabled
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = false
-        )
-    
-    // Get all messages including system for accurate token count
+    val currentResponse = _currentResponse.asStateFlow()
+    val modelSelection = modelRepository.selection
+    val aiPromptPreferences = preferences.aiPromptPreferences
+    val isTokenInfoEnabled = preferences.isTokenInfoEnabled
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val allMessagesIncludingSystem = _currentSessionId.flatMapLatest { sessionId -> 
-        llmRepository.getAllMessagesIncludingSystemForSession(sessionId)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = emptyList()
-    )
-    
-    // Chat statistics for developer mode
-    val chatStats = combine(
-        allMessagesIncludingSystem,
-        currentResponse,
-        userPreferencesRepository.getSystemPrompt()
-    ) { allMsgs, current, systemPromptText ->
-        // Calculate system prompt tokens separately
-        val actualSystemPromptText = systemPromptText ?: ""
-        val systemPromptTokens = if (actualSystemPromptText.isNotEmpty()) {
-            TokenUtils.estimateTokens(actualSystemPromptText)
-        } else {
-            0
-        }
-        
-        // Calculate total tokens
-        val allText = actualSystemPromptText + " " + allMsgs.filter { !it.isSystemPrompt }.joinToString(" ") { it.message } + " " + current
-        val totalChars = allText.length
-        val estimatedTokens = TokenUtils.estimateTokens(allText)
-        val maxTokens = 4096 // Qwen 2.5 with KV cache size 4096
-        
-        // Count only visible messages for UI
-        val visibleCount = allMsgs.count { !it.isSystemPrompt }
-        
+    val messages = currentSessionId.flatMapLatest { llmRepository.getMessagesForSession(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val chatSessions = llmRepository.getAllSessions()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val chatStats = combine(messages, currentResponse, llmRepository.promptUsage, aiPromptPreferences, modelSelection) { history, reply, usage, settings, selection ->
+        val apiModel = selection.selected as? ApiAiModel
+        val historyScope = apiModel?.historyScope(settings.historyScope) ?: settings.historyScope
+        val matchingUsage = usage?.takeIf { it.settings == settings && it.historyScope == historyScope }
+        val systemTokens = matchingUsage?.tokens ?: TokenUtils.estimateTokens(settings.instruction)
+        val contextText = history.filter { it.aiHistoryScope == historyScope }.joinToString(" ") { it.message }
+        val historyAndReply = "$contextText $reply"
+        val estimatedTokens = systemTokens + TokenUtils.estimateTokens(historyAndReply)
         ChatStats(
-            messageCount = visibleCount,
-            totalCharacters = totalChars,
+            messageCount = history.size,
             estimatedTokens = estimatedTokens,
-            systemPromptTokens = systemPromptTokens,
-            maxTokens = maxTokens,
-            contextUsagePercent = TokenUtils.calculateContextUsagePercent(estimatedTokens, maxTokens)
+            systemPromptTokens = systemTokens,
+            contextUsagePercent = TokenUtils.calculateContextUsagePercent(estimatedTokens, Constants.Ai.CONTEXT_TOKENS)
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ChatStats()
-    )
-    
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatStats())
+
     init {
-        Log.d("ChatViewModel", "Initializing ChatViewModel")
-        modelRepository.checkModelState()
-        
-        // Log initial state
-        val isDownloaded = modelRepository.isModelDownloaded()
-        Log.d("ChatViewModel", "Initial model downloaded check: $isDownloaded")
-        
-        // Observe model state changes
         viewModelScope.launch {
-            modelRepository.modelState.collect { state ->
-                Log.d("ChatViewModel", "Model state changed to: $state")
+            combine(preferences.isAiEnabled, modelSelection, aiPromptPreferences) { enabled, selection, settings ->
+                (selection.selected to settings).takeIf { enabled }
+            }.distinctUntilChanged().drop(1).collect {
+                stopGeneration()
+                if (modelSelection.value.selected?.supportsMedia != true) clearDraftMedia()
             }
         }
-        
-        // Restore last active session
+
         viewModelScope.launch {
-            val lastSessionId = userPreferencesRepository.getLastChatSessionId()
-            if (lastSessionId != null) {
-                _currentSessionId.value = lastSessionId
-            }
-            loadContextMessage()
-        }
-        
-        // Persist session ID whenever it changes
-        viewModelScope.launch {
-            _currentSessionId.collect { sessionId ->
-                userPreferencesRepository.saveLastChatSessionId(sessionId)
-            }
+            preferences.getLastChatSessionId()?.let { _currentSessionId.value = it }
+            currentSessionId.collect { preferences.saveLastChatSessionId(it) }
         }
     }
-    
-    private suspend fun loadContextMessage() {
-        val contextMessage = llmRepository.getFormattedContextForDisplay()
-        _contextMessage.value = ChatMessage(
-            message = contextMessage,
-            isUser = false,
-            isSystemPrompt = false
-        )
+
+    fun saveAiPromptPreferences(instruction: String, dataAccess: Set<AiDataAccess>) {
+        viewModelScope.launch {
+            stopGeneration()
+            preferences.saveAiPromptPreferences(instruction, dataAccess)
+        }
     }
-    
+
     fun sendMessage(message: String) {
-        if (message.isBlank() || _uiState.value.isLoading) return
-        
-        currentGenerationJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isLoading = true,
-                error = null
-            )
-            _currentResponse.value = ""
-            
-            try {
-                // Use streaming for better UX
-                llmRepository.sendMessageStream(message, _currentSessionId.value)
-                    .catch { error ->
-                        Log.e("ChatViewModel", "Error in stream", error)
-                        val errorMessage = when {
-                            error.message?.contains("memory is full") == true -> 
-                                "Chat memory is full. Please clear the chat to continue."
-                            error.message?.contains("downloading") == true ->
-                                "Model is downloading. Please wait."
-                            error.message?.contains("not downloaded") == true ->
-                                "AI model not downloaded. Go to Settings to download."
-                            else -> friendlyError(error)
-                        }
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = errorMessage
-                        )
-                    }
-                    .collect { partialResponse ->
-                        _currentResponse.value += partialResponse
-                    }
-                
-                // Stream completed successfully
-                Log.d("ChatViewModel", "Stream completed, resetting state")
-                _uiState.value = _uiState.value.copy(isLoading = false)
-                _currentResponse.value = ""
-            } catch (e: Throwable) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                Log.e("ChatViewModel", "Exception in sendMessage", e)
-                val errorMessage = when {
-                    e.message?.contains("memory is full") == true -> 
-                        "Chat memory is full. Please clear the chat to continue."
-                    e.message?.contains("downloading") == true ->
-                        "Model is downloading. Please wait."
-                    e.message?.contains("not downloaded") == true ->
-                        "AI model not downloaded. Go to Settings to download."
-                    else -> friendlyError(e)
-                }
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = errorMessage
-                )
-                _currentResponse.value = ""
+        val attachments = _mediaState.value.attachments
+        if ((message.isBlank() && attachments.isEmpty()) || _mediaState.value.busy) return
+        generate {
+            MessageRequest(ChatMessage(message = message.trim(), isUser = true, attachments = attachments))
+        }
+    }
+
+    fun editMessage(messageId: String, message: String) {
+        generate {
+            llmRepository.getMessageById(messageId)?.takeIf { it.isUser }?.let { existing ->
+                if (message.isBlank() && existing.attachments.isEmpty()) null
+                else MessageRequest(existing.copy(message = message.trim()), replaceFrom = existing)
             }
         }
     }
-    
-    fun clearChat() {
-        viewModelScope.launch {
-            llmRepository.deleteAllMessagesForSession(_currentSessionId.value)
-            _uiState.value = _uiState.value.copy(
-                error = null
-            )
-            // Reload context message after clearing chat
-            loadContextMessage()
-        }
-    }
-    
-    fun startNewChat() {
-        _currentSessionId.value = UUID.randomUUID().toString()
-        _currentResponse.value = ""
-        _uiState.value = _uiState.value.copy(error = null)
-        viewModelScope.launch {
-            loadContextMessage()
-        }
-    }
-    
-    fun loadSession(sessionId: String) {
-        _currentSessionId.value = sessionId
-        _currentResponse.value = ""
-        _uiState.value = _uiState.value.copy(error = null)
-        _contextMessage.value = null
-    }
-    
-    fun deleteMessage(messageId: String) {
-        viewModelScope.launch {
-            llmRepository.deleteMessage(messageId)
-        }
-    }
-    
-    fun editMessage(messageId: String, newText: String) {
-        viewModelScope.launch {
-            // First edit DB and delete subsequent
-            llmRepository.editMessage(messageId, newText)
-            
-            // Re-submit to trigger AI stream
-            // But wait, the system prompt doesn't need re-sending, just send the latest user message
-            // `sendMessageStream` might think it's a new chat if existingMessages is empty, but it's not.
-            sendMessage(newText)
-        }
-    }
-    
+
     fun regenerateMessage(messageId: String) {
-        viewModelScope.launch {
-            val msg = llmRepository.getMessageById(messageId) ?: return@launch
-            if (msg.isUser) return@launch // Only regenerate AI responses
-            
-            // Delete AI message and all subsequent messages
-            llmRepository.deleteMessage(messageId)
-            llmRepository.deleteMessagesAfter(msg.sessionId, msg.timestamp)
-            
-            val lastUserMsg = llmRepository.getLastUserMessage(msg.sessionId)
-            if (lastUserMsg != null) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = true,
-                    error = null
-                )
-                _currentResponse.value = ""
-                
-                try {
-                    // Start stream without inserting duplicate user message
-                    currentGenerationJob = launch {
-                        llmRepository.sendMessageStream(lastUserMsg.message, msg.sessionId, insertUserMessage = false)
-                            .catch { error ->
-                                Log.e("ChatViewModel", "Error in stream", error)
-                                val errorMessage = when {
-                                    error.message?.contains("memory is full") == true -> 
-                                        "Chat memory is full. Please clear the chat to continue."
-                                    error.message?.contains("downloading") == true ->
-                                        "Model is downloading. Please wait."
-                                    error.message?.contains("not downloaded") == true ->
-                                        "AI model not downloaded. Go to Settings to download."
-                                    else -> friendlyError(error)
-                                }
-                                _uiState.value = _uiState.value.copy(
-                                    isLoading = false,
-                                    error = errorMessage
-                                )
-                            }
-                            .collect { partialResponse ->
-                                _currentResponse.value += partialResponse
-                            }
-                        
-                        Log.d("ChatViewModel", "Regenerate stream completed")
-                        _uiState.value = _uiState.value.copy(isLoading = false)
-                        _currentResponse.value = ""
+        generate {
+            val response = llmRepository.getMessageById(messageId)?.takeUnless { it.isUser }
+            val selected = modelSelection.value.selected as? ApiAiModel
+            val expectedScope = selected?.historyScope(preferences.aiPromptPreferences.first().historyScope)
+            response?.takeIf { selected == null || it.aiHistoryScope == expectedScope }
+                ?.let { llmRepository.getLastUserMessageBefore(it) }?.let { message ->
+                MessageRequest(message, replaceFrom = message)
+            }
+        }
+    }
+
+    private fun generate(prepare: suspend () -> MessageRequest?) {
+        if (generationJob?.isActive == true || modelSelection.value.selected == null) return
+        val sessionId = currentSessionId.value
+        val previousJob = generationJob
+        _uiState.value = ChatUiState(isLoading = true)
+        _currentResponse.value = ""
+
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                previousJob?.join()
+                prepare()?.let { request ->
+                    llmRepository.sendMessageStream(sessionId, request.draft, request.replaceFrom) {
+                        if (request.replaceFrom == null) {
+                            mediaStore.removeDrafts(request.draft.attachments)
+                            _mediaState.update { it.copy(attachments = it.attachments - request.draft.attachments.toSet()) }
+                        }
+                    }.collect {
+                        _currentResponse.value += it
                     }
-                } catch (e: Throwable) {
-                    if (e !is kotlinx.coroutines.CancellationException) {
-                        Log.e("ChatViewModel", "Exception in regenerateMessage", e)
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            error = friendlyError(e)
-                        )
-                        _currentResponse.value = ""
-                    } else throw e
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ApiLlmException) {
+                _uiState.update { it.copy(apiError = error.error) }
+            } catch (error: Throwable) {
+                Log.e("ChatViewModel", "AI generation failed", error)
+                _uiState.update { it.copy(error = ChatErrorMapper.friendly(error)) }
+            } finally {
+                if (generationJob == coroutineContext.job) {
+                    generationJob = null
+                    _uiState.update { it.copy(isLoading = false) }
+                    _currentResponse.value = ""
+                }
+            }
+        }
+        generationJob = job
+        job.start()
+    }
+
+    fun mediaFile(attachment: ChatAttachment, draft: Boolean = false) = mediaStore.file(attachment, draft)
+
+    fun importMedia(uri: Uri, kind: ChatAttachmentKind, temporarySource: Boolean = false) {
+        val state = _mediaState.value
+        val max = if (kind == ChatAttachmentKind.IMAGE) ChatMediaStore.MAX_IMAGES else 1
+        if (state.attachments.count { it.kind == kind } >= max) return
+        val fallback = if (kind == ChatAttachmentKind.IMAGE) ChatMediaError.IMAGE else ChatMediaError.WAV_FORMAT
+        addMedia(fallback) { mediaStore.import(uri, kind, temporarySource) }
+    }
+
+    fun startRecording(name: String) {
+        if (_mediaState.value.attachments.any { it.kind == ChatAttachmentKind.AUDIO }) return
+        addMedia(ChatMediaError.RECORDING, recording = true) {
+            mediaStore.record(name) { _mediaState.value.recording }
+        }
+    }
+
+    private fun addMedia(fallback: ChatMediaError, recording: Boolean = false, load: suspend () -> ChatAttachment?) {
+        val state = _mediaState.value
+        if (state.busy || _uiState.value.isLoading || modelSelection.value.selected?.supportsMedia != true) return
+        _mediaState.value = state.copy(busy = true, recording = recording, error = null)
+        mediaJob = viewModelScope.launch {
+            try {
+                val attachment = load()
+                if (attachment != null) {
+                    _mediaState.update { it.copy(attachments = it.attachments + attachment) }
+                } else {
+                    _mediaState.update { it.copy(error = fallback) }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.w("ChatViewModel", "Unable to add chat attachment", error)
+                _mediaState.update { it.copy(error = (error as? ChatMediaException)?.reason ?: fallback) }
+            } finally {
+                if (mediaJob == coroutineContext.job) {
+                    mediaJob = null
+                    _mediaState.update { it.copy(busy = false, recording = false) }
                 }
             }
         }
     }
-    
+
+    fun finishRecording() {
+        _mediaState.update { it.copy(recording = false) }
+    }
+
+    fun cancelRecording() {
+        if (_mediaState.value.recording) mediaJob?.cancel()
+    }
+
+    fun clearMediaError() {
+        _mediaState.update { it.copy(error = null) }
+    }
+
+    fun removeDraft(attachment: ChatAttachment) {
+        mediaStore.removeDrafts(listOf(attachment))
+        _mediaState.update { it.copy(attachments = it.attachments - attachment) }
+    }
+
+    private fun clearDraftMedia() {
+        mediaJob?.cancel()
+        mediaStore.removeDrafts(_mediaState.value.attachments)
+        _mediaState.value = ChatMediaState()
+    }
+
     fun stopGeneration() {
-        currentGenerationJob?.cancel()
-        currentGenerationJob = null
-        _uiState.value = _uiState.value.copy(isLoading = false)
+        generationJob?.cancel()
+        _uiState.update { it.copy(isLoading = false) }
         _currentResponse.value = ""
     }
-    
+
+    fun startNewChat() = loadSession(UUID.randomUUID().toString())
+
+    fun loadSession(sessionId: String) {
+        stopGeneration()
+        clearDraftMedia()
+        _currentSessionId.value = sessionId
+        clearError()
+    }
+
     fun deleteSession(sessionId: String) {
         viewModelScope.launch {
-            llmRepository.deleteAllMessagesForSession(sessionId)
-            if (sessionId == _currentSessionId.value) {
+            if (sessionId == currentSessionId.value) {
+                val activeJob = generationJob
                 startNewChat()
+                activeJob?.join()
             }
-            _toastEvent.emit("Chat deleted")
+            llmRepository.deleteAllMessagesForSession(sessionId)
         }
+    }
+
+    fun deleteMessage(messageId: String) {
+        if (generationJob?.isActive == true) return
+        viewModelScope.launch { llmRepository.deleteMessage(messageId) }
     }
 
     fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        _uiState.update { it.copy(error = null, apiError = null) }
     }
 
-    private fun friendlyError(t: Throwable): String = ChatErrorMapper.friendly(t)
+    override fun onCleared() {
+        clearDraftMedia()
+        super.onCleared()
+    }
+
+    private data class MessageRequest(val draft: ChatMessage, val replaceFrom: ChatMessage? = null)
 }
 
-data class ChatUiState(
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val downloadProgress: Int = 0
+data class ChatMediaState(
+    val attachments: List<ChatAttachment> = emptyList(),
+    val busy: Boolean = false,
+    val recording: Boolean = false,
+    val error: ChatMediaError? = null
 )
+
+data class ChatUiState(val isLoading: Boolean = false, val error: String? = null, val apiError: ApiLlmError? = null)
 
 data class ChatStats(
     val messageCount: Int = 0,
-    val totalCharacters: Int = 0,
     val estimatedTokens: Int = 0,
     val systemPromptTokens: Int = 0,
-    val maxTokens: Int = 1280,
+    val maxTokens: Int = Constants.Ai.CONTEXT_TOKENS,
     val contextUsagePercent: Int = 0
 )

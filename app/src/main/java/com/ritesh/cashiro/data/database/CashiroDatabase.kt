@@ -85,7 +85,7 @@ import com.ritesh.cashiro.data.database.entity.WebhookProfileEntity
             com.ritesh.cashiro.data.database.entity.LendBorrowPersonEntity::class,
             com.ritesh.cashiro.data.database.entity.LendBorrowTransactionEntity::class
         ],
-        version = 62,
+        version = 64,
     exportSchema = true,
     autoMigrations =
         [
@@ -109,7 +109,9 @@ import com.ritesh.cashiro.data.database.entity.WebhookProfileEntity
             AutoMigration(from = 44, to = 45, spec = Migration44To45::class),
             AutoMigration(from = 45, to = 46, spec = Migration45To46::class),
             AutoMigration(from = 46, to = 47, spec = Migration46To47::class),
-            AutoMigration(from = 47, to = 48)
+            AutoMigration(from = 47, to = 48),
+            AutoMigration(from = 62, to = 63),
+            AutoMigration(from = 63, to = 64)
         ]
 )
 @TypeConverters(Converters::class)

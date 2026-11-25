@@ -115,7 +115,7 @@ fun AccountCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (account.isCreditCard) "Outstanding" else "Balance",
+                        text = stringResource(if (account.isCreditCard) R.string.outstanding_label else R.string.balance_label),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -320,14 +320,14 @@ text = {
                         ) {
                             Column {
                                 Text(
-                                    text = account.bankName,
+                                    text = accountDisplayName(account.bankName, account.accountLast4),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (account.isWallet) "wallet"
-                                    else "**** **** **** ${account.accountLast4}",
+                                    text = if (account.isWallet) stringResource(R.string.type_wallet)
+                                    else stringResource(R.string.account_last4_format, account.accountLast4),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)
                                 )
@@ -385,3 +385,6 @@ text = {
         }
     }
 }
+@Composable
+internal fun accountDisplayName(name: String, last4: String): String =
+    if (name == "Cash" && last4 == "wallet") stringResource(R.string.account_builtin_cash) else name

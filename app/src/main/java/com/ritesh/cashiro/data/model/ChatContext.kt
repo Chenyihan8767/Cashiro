@@ -10,11 +10,10 @@ import java.time.LocalDateTime
  */
 data class ChatContext(
     val currentDate: LocalDate,
-    val monthSummary: MonthSummary,
+    val monthSummary: MonthSummary?,
     val recentTransactions: List<TransactionSummary>,
     val activeSubscriptions: List<SubscriptionSummary>,
     val topCategories: List<CategorySpending>,
-    val quickStats: QuickStats,
     val budgets: List<BudgetSummary> = emptyList(),
     val accountBalances: List<AccountBalanceSummary> = emptyList(),
     val categories: List<CategoryInfo> = emptyList()
@@ -43,6 +42,7 @@ data class TransactionSummary(
 data class SubscriptionSummary(
     val merchantName: String,
     val amount: BigDecimal,
+    val currency: String,
     val nextPaymentDays: Int
 )
 
@@ -51,13 +51,6 @@ data class CategorySpending(
     val amount: BigDecimal,
     val percentage: Float,
     val transactionCount: Int
-)
-
-data class QuickStats(
-    val avgDailySpending: BigDecimal,
-    val largestExpenseThisMonth: TransactionSummary?,
-    val mostFrequentMerchant: String?,
-    val mostFrequentMerchantCount: Int = 0
 )
 
 data class BudgetSummary(

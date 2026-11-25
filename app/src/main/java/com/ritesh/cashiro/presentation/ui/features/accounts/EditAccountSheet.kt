@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
 import com.ritesh.cashiro.R
+import com.ritesh.cashiro.presentation.ui.components.accountDisplayName
 import com.ritesh.cashiro.data.database.entity.AccountBalanceEntity
 import com.ritesh.cashiro.presentation.effects.BlurredAnimatedVisibility
 import com.ritesh.cashiro.presentation.ui.components.BrandIcon
@@ -785,7 +786,7 @@ private fun PreviewAccountCard(
                 ) {
                     Column {
                         Text(
-                            text = bankName,
+                            text = accountDisplayName(bankName, accountLast4),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface

@@ -7,6 +7,8 @@ import com.google.gson.GsonBuilder
 import androidx.room.withTransaction
 import com.ritesh.cashiro.data.database.CashiroDatabase
 import com.ritesh.cashiro.data.database.entity.*
+import com.ritesh.cashiro.data.model.ChatAttachment
+import com.ritesh.cashiro.data.service.ChatMediaStore
 import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
 import com.ritesh.cashiro.data.repository.WebhookRepository
 import com.ritesh.cashiro.data.preferences.NavigationBarStyle
@@ -34,7 +36,8 @@ class BackupImporter @Inject constructor(
     @ApplicationContext private val context: Context,
     private val database: CashiroDatabase,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val webhookRepository: WebhookRepository
+    private val webhookRepository: WebhookRepository,
+    private val chatMediaStore: ChatMediaStore
 ) {
     
     private val gson = GsonBuilder()
@@ -171,7 +174,8 @@ class BackupImporter @Inject constructor(
         var importedTransactions = 0
         var importedCategories = 0
         
-        return database.withTransaction {
+        var previousMedia = emptyList<ChatAttachment>()
+        val result = database.withTransaction {
             try {
                 // Clear existing data
                 database.transactionDao().deleteAllTransactions()
@@ -183,6 +187,7 @@ class BackupImporter @Inject constructor(
                 database.unrecognizedSmsDao().deleteAll()
                 database.merchantMappingDao().deleteAllMappings()
                 database.unrecognizedSmsDao().deleteAll()
+                previousMedia = database.chatDao().getAllMessages().first().flatMap { it.attachments }
                 database.chatDao().deleteAllMessages()
                 database.budgetDao().deleteAllBudgets()
                 database.subcategoryDao().getAllSubcategories().first().forEach { 
@@ -224,7 +229,7 @@ class BackupImporter @Inject constructor(
                 }
                 
                 backup.database.chatMessages.forEach { message ->
-                    database.chatDao().insertMessage(message)
+                    database.chatDao().insertMessage(message.copy(attachments = emptyList(), aiHistoryScope = null))
                 }
                 
                 backup.database.exchangeRates.forEach { rate ->
@@ -279,6 +284,8 @@ class BackupImporter @Inject constructor(
                 throw e
             }
         }
+        if (result is ImportResult.Success) chatMediaStore.removeSaved(previousMedia)
+        return result
     }
     
     /**
@@ -728,9 +735,6 @@ class BackupImporter @Inject constructor(
         userPreferencesRepository.updateDeveloperMode(preferences.developer.isDeveloperModeEnabled)
         userPreferencesRepository.setWebhookModeEnabled(preferences.developer.isWebhookModeEnabled)
         userPreferencesRepository.setTokenInfoEnabled(preferences.developer.isTokenInfoEnabled)
-        preferences.developer.systemPrompt?.let {
-            userPreferencesRepository.updateSystemPrompt(it)
-        }
         
         // App preferences
         userPreferencesRepository.updateHasShownScanTutorial(preferences.app.hasShownScanTutorial)

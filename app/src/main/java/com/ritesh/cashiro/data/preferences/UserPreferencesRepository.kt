@@ -9,13 +9,16 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import com.ritesh.cashiro.core.Constants
 import com.ritesh.cashiro.data.webhook.WebhookScheduledTime
 import com.ritesh.cashiro.data.webhook.WebhookSettings
 import com.ritesh.cashiro.data.webhook.WebhookSyncMode
@@ -35,7 +38,10 @@ constructor(@ApplicationContext private val context: Context) {
         val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
         val HAS_SKIPPED_SMS_PERMISSION = booleanPreferencesKey("has_skipped_sms_permission")
         val DEVELOPER_MODE_ENABLED = booleanPreferencesKey("developer_mode_enabled")
-        val SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
+        val LEGACY_SYSTEM_PROMPT = stringPreferencesKey("system_prompt")
+        val AI_INSTRUCTION = stringPreferencesKey("ai_instruction")
+        val AI_DATA_ACCESS = stringSetPreferencesKey("ai_data_access")
+        val AI_HISTORY_SCOPE = stringPreferencesKey("ai_history_scope")
         val HAS_SHOWN_SCAN_TUTORIAL = booleanPreferencesKey("has_shown_scan_tutorial")
         val ACTIVE_DOWNLOAD_ID = longPreferencesKey("active_download_id")
         val SMS_SCAN_MONTHS = intPreferencesKey("sms_scan_months")
@@ -81,6 +87,8 @@ constructor(@ApplicationContext private val context: Context) {
         val SHOW_BANNER_IMAGE = booleanPreferencesKey("show_banner_image")
         val NAVIGATION_BAR_STYLE = stringPreferencesKey("navigation_bar_style")
         val APP_FONT = stringPreferencesKey("app_font")
+        val AI_ENABLED = booleanPreferencesKey("ai_enabled")
+        val AI_MODEL_ID = stringPreferencesKey("ai_model_id")
         
         // Home Widget Preferences
         val HOME_WIDGETS_ORDER = stringPreferencesKey("home_widgets_order")
@@ -394,14 +402,32 @@ constructor(@ApplicationContext private val context: Context) {
         }
     }
 
-    suspend fun updateSystemPrompt(prompt: String) {
+    val aiPromptPreferences: Flow<AiPromptPreferences> = context.dataStore.data.map { preferences ->
+        val defaults = AiPromptPreferences()
+        AiPromptPreferences(
+            instruction = preferences[PreferencesKeys.AI_INSTRUCTION]
+                ?.takeUnless { it == AiPromptPreferences.LEGACY_INSTRUCTION } ?: defaults.instruction,
+            dataAccess = AiDataAccess.entries.filter { it.name in preferences[PreferencesKeys.AI_DATA_ACCESS].orEmpty() }.toSet(),
+            historyScope = preferences[PreferencesKeys.AI_HISTORY_SCOPE] ?: defaults.historyScope
+        )
+    }
+
+    suspend fun saveAiPromptPreferences(instruction: String, dataAccess: Set<AiDataAccess>) {
+        val accessNames = dataAccess.map { it.name }.toSet()
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.SYSTEM_PROMPT] = prompt
+            val previousAccess = preferences[PreferencesKeys.AI_DATA_ACCESS].orEmpty()
+            preferences[PreferencesKeys.AI_INSTRUCTION] = instruction.trim().ifEmpty { AiPromptPreferences.DEFAULT_INSTRUCTION }
+            if (accessNames != previousAccess) {
+                preferences[PreferencesKeys.AI_DATA_ACCESS] = accessNames
+                preferences[PreferencesKeys.AI_HISTORY_SCOPE] = UUID.randomUUID().toString()
+            }
+            preferences.remove(PreferencesKeys.LEGACY_SYSTEM_PROMPT)
         }
     }
 
-    fun getSystemPrompt(): Flow<String?> =
-            context.dataStore.data.map { preferences -> preferences[PreferencesKeys.SYSTEM_PROMPT] }
+    suspend fun clearLegacyAiPrompt() {
+        context.dataStore.edit { it.remove(PreferencesKeys.LEGACY_SYSTEM_PROMPT) }
+    }
 
     suspend fun saveLastChatSessionId(sessionId: String) {
         context.dataStore.edit { preferences ->
@@ -419,10 +445,18 @@ constructor(@ApplicationContext private val context: Context) {
         }
     }
 
-    suspend fun saveActiveDownloadId(id: Long) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.ACTIVE_DOWNLOAD_ID] = id
-        }
+    val isAiEnabled: Flow<Boolean> =
+        context.dataStore.data.map { it[PreferencesKeys.AI_ENABLED] ?: false }
+
+    val aiModelId: Flow<String> =
+        context.dataStore.data.map { it[PreferencesKeys.AI_MODEL_ID] ?: Constants.Ai.QWEN_MODEL_ID }
+
+    suspend fun setAiEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[PreferencesKeys.AI_ENABLED] = enabled }
+    }
+
+    suspend fun setAiModelId(id: String) {
+        context.dataStore.edit { it[PreferencesKeys.AI_MODEL_ID] = id }
     }
 
     suspend fun getActiveDownloadId(): Long? {

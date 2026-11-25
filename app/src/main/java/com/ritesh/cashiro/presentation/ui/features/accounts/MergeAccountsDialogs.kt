@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ritesh.cashiro.R
+import com.ritesh.cashiro.presentation.ui.components.accountDisplayName
 import com.ritesh.cashiro.data.database.entity.AccountBalanceEntity
 import com.ritesh.cashiro.presentation.ui.components.BrandIcon
 import com.ritesh.cashiro.presentation.ui.icons.Danger
@@ -170,7 +171,7 @@ fun AccountSelectionItem(account: AccountBalanceEntity, isSelected: Boolean, onC
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = account.bankName,
+                    text = accountDisplayName(account.bankName, account.accountLast4),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,

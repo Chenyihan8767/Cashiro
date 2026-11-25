@@ -7,6 +7,8 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import com.ritesh.cashiro.R
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,7 +75,7 @@ fun AccountFilterChip(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = account.bankName,
+                        text = accountDisplayName(account.bankName, account.accountLast4),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -81,7 +83,7 @@ fun AccountFilterChip(
                         modifier = Modifier.basicMarquee()
                     )
                     Text(
-                        text = if (account.isWallet) "wallet" else account.accountLast4,
+                        text = if (account.isWallet) stringResource(R.string.type_wallet) else account.accountLast4,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f)
                     )
@@ -98,7 +100,7 @@ fun AccountFilterChip(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(R.string.selected_cd),
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(4.dp).fillMaxSize()
                     )

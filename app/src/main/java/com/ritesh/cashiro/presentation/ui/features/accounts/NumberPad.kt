@@ -3,6 +3,7 @@ package com.ritesh.cashiro.presentation.ui.features.accounts
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.res.stringResource
 import com.ritesh.cashiro.R
+import com.ritesh.cashiro.presentation.ui.components.accountDisplayName
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -105,7 +106,7 @@ fun NumberPad(
                         }
                         Column {
                             Text(
-                                text = bankName,
+                                text = accountDisplayName(bankName, accountLast4),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )

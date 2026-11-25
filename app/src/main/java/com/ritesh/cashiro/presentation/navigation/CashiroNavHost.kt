@@ -44,6 +44,7 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +90,7 @@ import com.ritesh.cashiro.presentation.ui.features.lendborrow.LendBorrowScreen
 import com.ritesh.cashiro.presentation.ui.features.lendborrow.PersonDetailScreen
 import com.ritesh.cashiro.presentation.ui.features.onboarding.OnBoardingScreen
 import com.ritesh.cashiro.presentation.ui.features.profile.ProfileScreen
+import com.ritesh.cashiro.presentation.ui.features.settings.AiSettingsScreen
 import com.ritesh.cashiro.presentation.ui.features.settings.SettingsScreen
 import com.ritesh.cashiro.presentation.ui.features.settings.about.AboutScreen
 import com.ritesh.cashiro.presentation.ui.features.settings.about.LicensesScreen
@@ -153,6 +155,8 @@ fun CashiroNavHost(
     val homeViewModel: HomeViewModel = hiltViewModel()
     val transactionsViewModel: TransactionsViewModel = hiltViewModel()
     val homeUiState by homeViewModel.uiState.collectAsState()
+    val aiEnabled by homeViewModel.isAiEnabled.collectAsStateWithLifecycle(initialValue = null)
+    val aiModelSelection by homeViewModel.aiModelSelection.collectAsStateWithLifecycle()
     val transactionsUiState by transactionsViewModel.uiState.collectAsState()
     val smsScanWorkInfo by homeViewModel.smsScanWorkInfo.collectAsState()
     val view = LocalView.current
@@ -228,7 +232,6 @@ fun CashiroNavHost(
                     HomeScreen(
                         navController = navController,
                         onNavigateToSettings = { navController.safeNavigate(Settings) },
-                        onNavigateToChat = { navController.safeNavigate(Chat) },
                         onNavigateToTransactions = { navController.safeNavigate(Transactions()) },
                         onNavigateToTransactionsWithSearch = {
                             navController.safeNavigate(Transactions(focusSearch = true))
@@ -283,11 +286,19 @@ fun CashiroNavHost(
                     popEnterTransition = CashiroTransitions.verticalSlidePopEnter,
                     popExitTransition = CashiroTransitions.verticalSlidePopExit
                 ) {
-                    ChatScreen(
-                        modifier = Modifier.imePadding(),
-                        onNavigateToSettings = { navController.safeNavigate(Settings) },
-                        onNavigateBack = { navController.safePopBackStack() }
-                    )
+                    if (aiEnabled == true) {
+                        ChatScreen(
+                            modifier = Modifier.imePadding(),
+                            onNavigateToSettings = { navController.safeNavigate(AiSettings) },
+                            onNavigateBack = { navController.safePopBackStack() }
+                        )
+                    } else if (aiEnabled != null) {
+                        LaunchedEffect(navBackStackEntry) {
+                            if (navController.currentDestination?.route == Chat::class.qualifiedName) {
+                                navController.safePopBackStack()
+                            }
+                        }
+                    }
                 }
 
                 /* SETTINGS & SUB-SCREENS ---- */
@@ -313,6 +324,20 @@ fun CashiroNavHost(
                         onNavigateToCloudBackup = { navController.safeNavigate(CloudBackup) },
                         onNavigateToAbout = { navController.safeNavigate(About) },
                         onNavigateToCurrency = { navController.safeNavigate(CurrencySettings) },
+                        onNavigateToAiSettings = { navController.safeNavigate(AiSettings) }
+                    )
+                }
+
+                composable<AiSettings>(
+                    enterTransition = CashiroTransitions.horizontalSlideEnter,
+                    exitTransition = CashiroTransitions.horizontalSlideExit,
+                    popEnterTransition = CashiroTransitions.horizontalSlidePopEnter,
+                    popExitTransition = CashiroTransitions.horizontalSlidePopExit
+                ) { entry ->
+                    val graphEntry = remember(entry) { navController.getBackStackEntry(navController.graph.id) }
+                    AiSettingsScreen(
+                        viewModel = hiltViewModel(graphEntry),
+                        onNavigateBack = { navController.safePopBackStack() },
                         blurEffects = themeUiState.blurEffects
                     )
                 }
@@ -1052,7 +1077,8 @@ fun CashiroNavHost(
         val optionsDesc = stringResource(R.string.options_desc)
         val addTransactionLbl = stringResource(R.string.add_transaction)
         val syncSmsLbl = stringResource(R.string.sync_sms)
-        val askAiLbl = stringResource(R.string.ask_ai)
+        val askAiLbl = aiModelSelection.selected?.let { stringResource(R.string.ask_local_model, it.name) }
+            ?: stringResource(R.string.ask_ai)
         val exportLbl = stringResource(R.string.export)
         val searchLbl = stringResource(R.string.search)
 
@@ -1115,12 +1141,11 @@ fun CashiroNavHost(
                                 )
                             }
 
-                            HorizontalDivider(
-                                thickness = 1.5.dp,
-                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
-                            )
-
-                            if (com.ritesh.cashiro.core.Constants.Device.is64Bit) {
+                            if (aiEnabled == true) {
+                                HorizontalDivider(
+                                    thickness = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                                )
                                 DropdownMenuItem(
                                     text = { Text(
                                         text = askAiLbl,
@@ -1159,11 +1184,11 @@ fun CashiroNavHost(
                                 },
                                 leadingIcon = { Icon(Iconax.Search, contentDescription = null) }
                             )
-                            HorizontalDivider(
-                                thickness = 1.5.dp,
-                                color = MaterialTheme.colorScheme.surface.copy(0.6f)
-                            )
-                            if (com.ritesh.cashiro.core.Constants.Device.is64Bit) {
+                            if (aiEnabled == true) {
+                                HorizontalDivider(
+                                    thickness = 1.5.dp,
+                                    color = MaterialTheme.colorScheme.surface.copy(0.6f)
+                                )
                                 DropdownMenuItem(
                                     text = { Text(askAiLbl) },
                                     onClick = {

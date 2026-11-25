@@ -905,6 +905,7 @@ fun DeleteBudgetDialog(
 @OptIn(ExperimentalHazeApi::class)
 @Composable
 fun DeleteAIModelDialog(
+    modelName: String,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
     blurEffects: Boolean = LocalBlurEffects.current,
@@ -923,7 +924,7 @@ fun DeleteAIModelDialog(
         title = { Text(stringResource(R.string.delete_ai_model_title)) },
         text = {
             Text(
-                text = stringResource(R.string.delete_ai_model_confirm),
+                text = stringResource(R.string.ai_delete_model_confirm, modelName),
                 style = MaterialTheme.typography.bodyMedium
             )
         },

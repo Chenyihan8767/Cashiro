@@ -1,13 +1,16 @@
 package com.ritesh.cashiro.data.preferences
 
-enum class HomeWidget(val displayName: String, val defaultOrder: Int) {
-    NETWORTH_SUMMARY("Net Worth", 0),
-    LOANS("Loans", 1),
-    ACCOUNT_CAROUSEL("Accounts", 2),
-    UPCOMING_SUBSCRIPTIONS("Upcoming Subscriptions", 3),
-    RECENT_TRANSACTIONS("Recent Transactions", 4),
-    BUDGET_CAROUSEL("Budgets", 5),
-    TRANSACTION_HEATMAP("Activity Heatmap", 6);
+import androidx.annotation.StringRes
+import com.ritesh.cashiro.R
+
+enum class HomeWidget(@StringRes val label: Int, val defaultOrder: Int) {
+    NETWORTH_SUMMARY(R.string.net_worth, 0),
+    LOANS(R.string.lend_borrow_title, 1),
+    ACCOUNT_CAROUSEL(R.string.accounts, 2),
+    UPCOMING_SUBSCRIPTIONS(R.string.widget_upcoming_subscriptions, 3),
+    RECENT_TRANSACTIONS(R.string.widget_recent_transactions, 4),
+    BUDGET_CAROUSEL(R.string.budgets, 5),
+    TRANSACTION_HEATMAP(R.string.widget_activity_heatmap, 6);
     
     companion object {
         fun fromName(name: String): HomeWidget? {

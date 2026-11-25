@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.ritesh.cashiro.data.database.entity.AccountBalanceEntity
 import androidx.compose.ui.res.stringResource
 import com.ritesh.cashiro.R
+import com.ritesh.cashiro.presentation.ui.components.accountDisplayName
 import com.ritesh.cashiro.presentation.ui.icons.Bag
 import com.ritesh.cashiro.presentation.ui.icons.Card
 import com.ritesh.cashiro.presentation.ui.icons.Clock
@@ -104,7 +105,8 @@ fun HistorySheet(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "$bankName ••$accountLast4",
+                text = if (accountLast4 == "wallet") accountDisplayName(bankName, accountLast4)
+                    else "$bankName ••$accountLast4",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

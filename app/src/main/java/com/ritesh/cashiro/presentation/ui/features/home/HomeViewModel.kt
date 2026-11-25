@@ -22,11 +22,11 @@ import com.ritesh.cashiro.data.manager.InAppReviewManager
 import com.ritesh.cashiro.data.manager.InAppUpdateManager
 import com.ritesh.cashiro.data.preferences.HomeWidget
 import com.ritesh.cashiro.data.preferences.UserPreferencesRepository
+import com.ritesh.cashiro.data.repository.ModelRepository
 import com.ritesh.cashiro.data.repository.AccountBalanceRepository
 import com.ritesh.cashiro.data.repository.BudgetRepository
 import com.ritesh.cashiro.data.repository.CategoryRepository
 import com.ritesh.cashiro.data.repository.CurrencyRepository
-import com.ritesh.cashiro.data.repository.LlmRepository
 import com.ritesh.cashiro.data.repository.SubcategoryRepository
 import com.ritesh.cashiro.data.repository.SubscriptionRepository
 import com.ritesh.cashiro.data.repository.TransactionRepository
@@ -59,12 +59,12 @@ class HomeViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
-    private val llmRepository: LlmRepository,
     private val currencyConversionService: CurrencyConversionService,
     private val currencyRepository: CurrencyRepository,
     private val inAppUpdateManager: InAppUpdateManager,
     private val inAppReviewManager: InAppReviewManager,
     private val userPreferencesRepository: UserPreferencesRepository,
+    localModels: ModelRepository,
     private val unrecognizedSmsRepository: UnrecognizedSmsRepository,
     private val categoryRepository: CategoryRepository,
     private val subcategoryRepository: SubcategoryRepository,
@@ -76,6 +76,8 @@ class HomeViewModel @Inject constructor(
     private val sharedPrefs = context.getSharedPreferences("account_prefs", Context.MODE_PRIVATE)
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+    val isAiEnabled = userPreferencesRepository.isAiEnabled
+    val aiModelSelection = localModels.selection
 
     private val _deletedTransaction = MutableStateFlow<TransactionEntity?>(null)
     val deletedTransaction: StateFlow<TransactionEntity?> = _deletedTransaction.asStateFlow()
@@ -749,15 +751,6 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun updateSystemPrompt() {
-        viewModelScope.launch {
-            try {
-                llmRepository.updateSystemPrompt()
-            } catch (e: Exception) {
-                // Handle error silently or add error state if needed
-            }
-        }
-    }
     fun hideBreakdownDialog() {
         _uiState.value = _uiState.value.copy(showBreakdownDialog = false)
     }

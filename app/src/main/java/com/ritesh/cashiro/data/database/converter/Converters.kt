@@ -1,6 +1,8 @@
 package com.ritesh.cashiro.data.database.converter
 
 import androidx.room.TypeConverter
+import com.ritesh.cashiro.data.model.ChatAttachment
+import kotlinx.serialization.json.Json
 import com.ritesh.cashiro.data.database.entity.SubscriptionState
 import com.ritesh.cashiro.data.database.entity.TransactionType
 import com.ritesh.cashiro.data.database.entity.BudgetPeriod
@@ -16,6 +18,12 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 class Converters {
+    @TypeConverter
+    fun encodeChatAttachments(value: List<ChatAttachment>): String = Json.encodeToString(value)
+
+    @TypeConverter
+    fun decodeChatAttachments(value: String): List<ChatAttachment> = Json.decodeFromString(value)
+
     // Handle both ISO format (2025-08-01T18:17:16) and space format (2025-08-01 18:17:16)
     private val dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
     private val dateTimeFormatterWithSpace = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")

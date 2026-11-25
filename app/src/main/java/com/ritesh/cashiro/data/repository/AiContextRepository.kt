@@ -4,9 +4,10 @@ import com.ritesh.cashiro.data.currency.CurrencyConversionService
 import com.ritesh.cashiro.data.database.dao.SubscriptionDao
 import com.ritesh.cashiro.data.database.dao.TransactionDao
 import com.ritesh.cashiro.data.database.entity.SubscriptionState
-import com.ritesh.cashiro.data.database.entity.TransactionEntity
 import com.ritesh.cashiro.data.database.entity.TransactionType
 import com.ritesh.cashiro.data.model.*
+import com.ritesh.cashiro.data.preferences.AiDataAccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -27,42 +28,47 @@ class AiContextRepository @Inject constructor(
     private val subscriptionDao: SubscriptionDao,
     private val budgetRepository: BudgetRepository,
     private val accountBalanceRepository: AccountBalanceRepository,
-    private val currencyRepository: CurrencyRepository,
     private val currencyConversionService: CurrencyConversionService,
     private val categoryRepository: CategoryRepository,
     private val subcategoryRepository: SubcategoryRepository
 ) {
     
-    /**
-     * Gathers all financial context for AI chat in parallel
-     */
-    suspend fun getChatContext(): ChatContext = coroutineScope {
-        val currentDate = LocalDate.now()
-        val effectiveCurrency = currencyRepository.effectiveBaseCurrencyCode.first()
-        
-        // Launch parallel queries
-        val monthSummaryDeferred = async { getMonthSummary(currentDate) }
-        val recentTransactionsDeferred = async { getRecentTransactions(currentDate, effectiveCurrency) }
-        val activeSubscriptionsDeferred = async { getActiveSubscriptions(currentDate) }
-        val topCategoriesDeferred = async { getTopCategories(currentDate) }
-        val quickStatsDeferred = async { getQuickStats(currentDate, effectiveCurrency) }
-        val budgetsDeferred = async { getBudgets() }
-        val accountBalancesDeferred = async { getAccountBalances() }
-        val categoriesDeferred = async { getAllCategories() }
-        
+    suspend fun getChatContext(access: Set<AiDataAccess>, currency: String): ChatContext = coroutineScope {
+        val date = LocalDate.now()
+        val summary = async {
+            if (AiDataAccess.MONTHLY_SUMMARY in access) getMonthSummary(date) else null
+        }
+        val spending = async {
+            if (AiDataAccess.MONTHLY_SUMMARY in access) getTopCategories(date) else emptyList()
+        }
+        val transactions = async {
+            if (AiDataAccess.RECENT_TRANSACTIONS in access) getRecentTransactions(date, currency) else emptyList()
+        }
+        val subscriptions = async {
+            if (AiDataAccess.SUBSCRIPTIONS in access) getActiveSubscriptions(date) else emptyList()
+        }
+        val budgets = async {
+            if (AiDataAccess.BUDGETS in access) getBudgets() else emptyList()
+        }
+        val balances = async {
+            if (AiDataAccess.ACCOUNTS in access) getAccountBalances() else emptyList()
+        }
+        val categories = async {
+            if (AiDataAccess.CATEGORIES in access) getAllCategories() else emptyList()
+        }
+
         ChatContext(
-            currentDate = currentDate,
-            monthSummary = monthSummaryDeferred.await(),
-            recentTransactions = recentTransactionsDeferred.await(),
-            activeSubscriptions = activeSubscriptionsDeferred.await(),
-            topCategories = topCategoriesDeferred.await(),
-            quickStats = quickStatsDeferred.await(),
-            budgets = budgetsDeferred.await(),
-            accountBalances = accountBalancesDeferred.await(),
-            categories = categoriesDeferred.await()
+            currentDate = date,
+            monthSummary = summary.await(),
+            recentTransactions = transactions.await(),
+            activeSubscriptions = subscriptions.await(),
+            topCategories = spending.await(),
+            budgets = budgets.await(),
+            accountBalances = balances.await(),
+            categories = categories.await()
         )
     }
-    
+
     private suspend fun getMonthSummary(currentDate: LocalDate): MonthSummary {
         val yearMonth = YearMonth.from(currentDate)
         val startOfMonth = yearMonth.atDay(1)
@@ -149,6 +155,7 @@ class AiContextRepository @Inject constructor(
                 SubscriptionSummary(
                     merchantName = subscription.merchantName,
                     amount = subscription.amount,
+                    currency = subscription.currency,
                     nextPaymentDays = daysUntilPayment
                 )
             }
@@ -212,7 +219,9 @@ class AiContextRepository @Inject constructor(
                         percentUsed = withSpending.percentUsed,
                         currency = budget.currency
                     )
-                } catch (e: Exception) {
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
                     null
                 }
             }
@@ -223,9 +232,6 @@ class AiContextRepository @Inject constructor(
         return accountBalanceRepository.getAllLatestBalances()
             .first()
             .map { balance ->
-                val available = if (balance.isCreditCard && balance.creditLimit != null) {
-                    balance.creditLimit - balance.balance
-                } else null
                 AccountBalanceSummary(
                     bankName = balance.bankName,
                     accountLast4 = balance.accountLast4,
@@ -237,64 +243,6 @@ class AiContextRepository @Inject constructor(
                 )
             }
             .sortedBy { it.bankName }
-    }
-
-    private suspend fun getQuickStats(currentDate: LocalDate, effectiveCurrency: String): QuickStats {
-        val yearMonth = YearMonth.from(currentDate)
-        val startOfMonth = yearMonth.atDay(1)
-        val endOfMonth = yearMonth.atEndOfMonth()
-        
-        val transactions = transactionDao.getTransactionsBetweenDatesList(
-            startOfMonth.atStartOfDay(),
-            endOfMonth.atTime(23, 59, 59)
-        )
-        
-        val expenses = transactions.filter { it.transactionType == TransactionType.EXPENSE || it.transactionType == TransactionType.LENT }
-        
-        // Calculate average daily spending
-        var totalExpense = BigDecimal.ZERO
-        for (expense in expenses) {
-            totalExpense += expense.amount
-        }
-        val daysElapsed = currentDate.dayOfMonth
-        val avgDailySpending = if (daysElapsed > 0) {
-            totalExpense.divide(BigDecimal.valueOf(daysElapsed.toLong()), 2, RoundingMode.HALF_UP)
-        } else BigDecimal.ZERO
-        
-        // Find largest expense
-        val largestExpense = expenses.maxByOrNull { it.amount }?.let { transaction ->
-            val daysAgo = ChronoUnit.DAYS.between(
-                transaction.dateTime.toLocalDate(),
-                currentDate
-            ).toInt()
-            
-            val converted = if (transaction.currency != effectiveCurrency) {
-                try {
-                    currencyConversionService.convertAmount(transaction.amount, transaction.currency, effectiveCurrency)
-                } catch (_: Exception) { null }
-            } else null
-            
-            TransactionSummary(
-                merchantName = transaction.merchantName,
-                amount = transaction.amount,
-                originalCurrency = transaction.currency,
-                convertedAmount = converted,
-                category = transaction.category ?: "Miscellaneous",
-                subcategory = transaction.subcategory,
-                daysAgo = daysAgo
-            )
-        }
-        
-        // Find most frequent merchant
-        val merchantCounts = expenses.groupingBy { it.merchantName }.eachCount()
-        val mostFrequent = merchantCounts.maxByOrNull { it.value }
-        
-        return QuickStats(
-            avgDailySpending = avgDailySpending,
-            largestExpenseThisMonth = largestExpense,
-            mostFrequentMerchant = mostFrequent?.key,
-            mostFrequentMerchantCount = mostFrequent?.value ?: 0
-        )
     }
 
     private suspend fun getAllCategories(): List<CategoryInfo> {

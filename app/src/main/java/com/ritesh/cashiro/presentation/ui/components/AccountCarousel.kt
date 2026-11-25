@@ -32,6 +32,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.ritesh.cashiro.R
 import androidx.compose.ui.unit.sp
 import com.ritesh.cashiro.data.database.entity.AccountBalanceEntity
 import com.ritesh.cashiro.presentation.common.icons.IconProvider
@@ -73,9 +75,9 @@ fun SharedTransitionScope.AccountCarousel(
                 accountLast4 = account.accountLast4,
                 balance = account.formatBalance(),
                 subtitle = when {
-                    account.isWallet -> "Wallet"
-                    creditCards.contains(account) -> "Credit Card"
-                    else -> "Savings account"
+                    account.isWallet -> stringResource(R.string.type_wallet)
+                    account.isCreditCard -> stringResource(R.string.type_credit_card)
+                    else -> stringResource(R.string.type_savings_account)
                 },
                 onClick = { onAccountClick(account.bankName, account.accountLast4) },
                 animatedContentScope = animatedContentScope,
@@ -105,9 +107,9 @@ fun SharedTransitionScope.AccountCarousel(
                 accountLast4 = account.accountLast4,
                 balance = account.formatBalance(),
                 subtitle = when {
-                    account.isWallet -> "Wallet"
-                    creditCards.contains(account) -> "Credit Card"
-                    else -> "Savings account"
+                    account.isWallet -> stringResource(R.string.type_wallet)
+                    account.isCreditCard -> stringResource(R.string.type_credit_card)
+                    else -> stringResource(R.string.type_savings_account)
                 },
                 onClick = { onAccountClick(account.bankName, account.accountLast4) },
                 animatedContentScope = animatedContentScope,
@@ -240,7 +242,7 @@ fun SharedTransitionScope.AccountCarouselCard(
 
                 Column {
                     Text(
-                        text = if (isWallet) bankName.uppercase() else "${bankName.uppercase()} ••$accountLast4",
+                        text = if (isWallet) accountDisplayName(bankName, accountLast4) else "${bankName.uppercase()} ••$accountLast4",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         fontWeight = FontWeight.Bold,
@@ -287,7 +289,7 @@ fun SharedTransitionScope.AccountCarouselCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "View details",
+                        text = stringResource(R.string.view_details),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         fontWeight = FontWeight.Bold

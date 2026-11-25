@@ -13,6 +13,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import com.ritesh.cashiro.presentation.effects.BlurredAnimatedVisibility
 
 @Composable
@@ -26,7 +27,8 @@ fun PreferenceSwitch(
     padding: PaddingValues = listItemPadding,
     isFirst: Boolean = false,
     isLast: Boolean = false,
-    isSingle: Boolean = false
+    isSingle: Boolean = false,
+    titleFontWeight: FontWeight? = null
 ) {
     BlurredAnimatedVisibility(
         visible = visible,
@@ -34,7 +36,7 @@ fun PreferenceSwitch(
         exit = fadeOut()
     ) {
         ListItem(
-            headline = { Text(title) },
+            headline = { Text(title, fontWeight = titleFontWeight) },
             supporting = { if (subtitle.isNotEmpty())Text(subtitle) },
             leading = {
                 leadingIcon()

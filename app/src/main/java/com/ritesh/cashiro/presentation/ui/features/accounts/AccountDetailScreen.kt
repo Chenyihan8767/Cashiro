@@ -53,6 +53,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
 import com.ritesh.cashiro.R
+import com.ritesh.cashiro.presentation.ui.components.accountDisplayName
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -126,7 +127,7 @@ fun SharedTransitionScope.AccountDetailScreen(
             CustomTitleTopAppBar(
                 scrollBehaviorSmall = scrollBehaviorSmall,
                 scrollBehaviorLarge = scrollBehaviorLarge,
-                title = uiState.bankName.ifEmpty { stringResource(R.string.account_details) },
+                title = accountDisplayName(uiState.bankName, accountLast4).ifEmpty { stringResource(R.string.account_details) },
                 hasBackButton = true,
                 hazeState = hazeState,
                 navigationContent = { NavigationContent { navController.safePopBackStack() } },

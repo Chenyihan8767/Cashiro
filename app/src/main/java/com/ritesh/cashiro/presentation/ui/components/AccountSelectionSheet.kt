@@ -11,6 +11,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import com.ritesh.cashiro.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -21,7 +23,7 @@ import com.ritesh.cashiro.presentation.ui.theme.Spacing
 fun AccountSelectionSheet(
     accounts: List<AccountBalanceEntity>,
     selectedAccount: AccountBalanceEntity?,
-    title: String = "Select Account",
+    title: String = stringResource(R.string.select_account),
     onAccountSelected: (AccountBalanceEntity?) -> Unit,
     isTransitioning: Boolean = false,
     showNoneOption: Boolean = true
@@ -41,7 +43,7 @@ fun AccountSelectionSheet(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No accounts found",
+                    text = stringResource(R.string.no_accounts_found),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -77,7 +79,7 @@ fun AccountSelectionSheet(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "None (Manual Entry)",
+                                    text = stringResource(R.string.none_manual_entry),
                                     style = MaterialTheme.typography.bodyLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface

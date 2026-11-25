@@ -182,7 +182,7 @@ constructor(
     fun setAsMainAccount(bankName: String, accountLast4: String) {
         val key = "${bankName}_${accountLast4}"
         sharedPrefs.edit { putString("main_account", key) }
-        _uiState.update { it.copy(mainAccountKey = key, successMessage = "Main account set successfully") }
+        _uiState.update { it.copy(mainAccountKey = key, successMessage = context.getString(R.string.account_main_saved)) }
         viewModelScope.launch {
             // Persist this account's currency as the app-wide base currency
             val account = _uiState.value.accounts.find {
@@ -285,7 +285,7 @@ constructor(
             if (existingAccount != null) {
                 _uiState.update {
                     it.copy(
-                            errorMessage = "Account with this name and last 4 digits already exists"
+                            errorMessage = context.getString(R.string.account_duplicate)
                     )
                 }
                 return@launch
@@ -308,7 +308,7 @@ constructor(
                 )
             )
 
-            _uiState.update { it.copy(successMessage = "Account added successfully") }
+            _uiState.update { it.copy(successMessage = context.getString(R.string.account_added)) }
             delay(3000)
             _uiState.update { it.copy(successMessage = null) }
         }
@@ -490,7 +490,7 @@ constructor(
 
                         // Show success message with balance
                         val message =
-                                "Card linked successfully. Balance updated to ${CurrencyFormatter.formatCurrency(card.lastBalance)}"
+                                context.getString(R.string.account_card_linked_balance, CurrencyFormatter.formatCurrency(card.lastBalance))
                         _uiState.update { it.copy(successMessage = message) }
                     } catch (e: Exception) {
                         Log.e(
@@ -502,13 +502,13 @@ constructor(
                         _uiState.update {
                             it.copy(
                                     successMessage =
-                                            "Card linked successfully (balance update failed)"
+                                            context.getString(R.string.account_card_linked_balance_failed)
                             )
                         }
                     }
                 } else {
                     // No balance to copy, just show link success
-                    _uiState.update { it.copy(successMessage = "Card linked successfully") }
+                    _uiState.update { it.copy(successMessage = context.getString(R.string.account_card_linked)) }
                 }
 
                 // Clear message after delay
@@ -519,7 +519,7 @@ constructor(
                 loadAccounts()
             } catch (e: Exception) {
                 Log.e("ManageAccountsViewModel", "Failed to link card", e)
-                _uiState.update { it.copy(errorMessage = "Failed to link card: ${e.message}") }
+                _uiState.update { it.copy(errorMessage = context.getString(R.string.account_card_link_failed)) }
             }
         }
     }
@@ -536,7 +536,7 @@ constructor(
             try {
                 Log.d("ManageAccountsViewModel", "Deleting card with ID: $cardId")
                 cardRepository.deleteCard(cardId)
-                _uiState.update { it.copy(successMessage = "Card deleted successfully") }
+                _uiState.update { it.copy(successMessage = context.getString(R.string.account_card_deleted)) }
 
                 // Clear message after delay
                 delay(2000)
@@ -545,7 +545,7 @@ constructor(
                 loadCards()
             } catch (e: Exception) {
                Log.e("ManageAccountsViewModel", "Failed to delete card", e)
-                _uiState.update { it.copy(errorMessage = "Failed to delete card: ${e.message}") }
+                _uiState.update { it.copy(errorMessage = context.getString(R.string.account_card_delete_failed)) }
             }
         }
     }
@@ -583,7 +583,7 @@ constructor(
                             hiddenAccounts = hidden,
                             mainAccountKey = if (it.mainAccountKey == key) null else it.mainAccountKey,
                             successMessage =
-                                    "Account deleted successfully ($deletedCount balance records removed)"
+                                    context.getString(R.string.account_deleted_with_history, deletedCount)
                     )
                 }
 
@@ -593,7 +593,7 @@ constructor(
 
                 loadCards() // Reload cards to update UI
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = "Failed to delete account: ${e.message}") }
+                _uiState.update { it.copy(errorMessage = context.getString(R.string.account_delete_failed)) }
             }
         }
     }
@@ -662,13 +662,13 @@ constructor(
                     )
                 )
 
-                _uiState.update { it.copy(successMessage = "Account updated successfully") }
+                _uiState.update { it.copy(successMessage = context.getString(R.string.account_updated)) }
 
 
                 delay(3000)
                 _uiState.update { it.copy(successMessage = null) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = "Failed to update account: ${e.message}") }
+                _uiState.update { it.copy(errorMessage = context.getString(R.string.account_update_failed)) }
             }
         }
     }
@@ -721,7 +721,7 @@ constructor(
                 loadCards()
 
                 _uiState.update {
-                    it.copy(isLoading = false, successMessage = "Accounts merged successfully")
+                    it.copy(isLoading = false, successMessage = context.getString(R.string.account_merged))
                 }
                 delay(3000)
                 _uiState.update { it.copy(successMessage = null) }
@@ -729,7 +729,7 @@ constructor(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "Failed to merge accounts: ${e.message}"
+                        errorMessage = context.getString(R.string.account_merge_failed)
                     )
                 }
             }
